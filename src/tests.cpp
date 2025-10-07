@@ -1,4 +1,7 @@
 #include "tests.h"
+#include <cmath>     // For roundf in hist_eq
+#include <cstring>   // For memset in hist_eq
+#include <algorithm> // For std::min, std::max in resize
 
 // 练习1，实现库函数strlen
 int my_strlen(char *str) {
@@ -7,18 +10,29 @@ int my_strlen(char *str) {
      */
 
     // IMPLEMENT YOUR CODE HERE
-    return 0;
+    int len = 0;
+
+    while (str[len] != '\0') {len++;}
+
+    return len;
 }
 
 
 // 练习2，实现库函数strcat
 void my_strcat(char *str_1, char *str_2) {
-    /**
-     * 将字符串str_2拼接到str_1之后，我们保证str_1指向的内存空间足够用于添加str_2。
-     * 注意结束符'\0'的处理。
-     */
+    // find end
+    char *end1 = str_1;
 
-    // IMPLEMENT YOUR CODE HERE
+    while (*end1 != '\0') {end1++;}
+
+    while (*str_2 != '\0') {
+        *end1 = *str_2;
+
+        end1++;
+        str_2++;
+    }
+
+    *end1 = '\0';
 }
 
 
@@ -31,7 +45,27 @@ char* my_strstr(char *s, char *p) {
      */
 
     // IMPLEMENT YOUR CODE HERE
+
+        if (*p == '\0') {return s;}
+    
+    while (*s != '\0') {
+        char *s_temp = s;
+        char *p_temp = p;
+
+        while (*s_temp != '\0' && *p_temp != '\0' && *s_temp == *p_temp) {
+            s_temp++;
+            p_temp++;
+        }
+
+        if (*p_temp == '\0') {
+            return s; 
+        }
+
+        s++;
+    }
+
     return 0;
+    
 }
 
 
@@ -97,6 +131,21 @@ void rgb2gray(float *in, float *out, int h, int w) {
 
     // IMPLEMENT YOUR CODE HERE
     // ...
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            int in_idx = (y * w + x) * 3;
+            int out_idx = y * w + x;
+
+            float r = in[in_idx];     
+            float g = in[in_idx + 1]; 
+            float b = in[in_idx + 2]; 
+
+            float gray_value = 0.2989 * r + 0.5870 * g + 0.1140 * b;
+
+            out[out_idx] = gray_value;
+        }
+    }
+
 }
 
 // 练习5，实现图像处理算法 resize：缩小或放大图像
@@ -198,6 +247,45 @@ void resize(float *in, float *out, int h, int w, int c, float scale) {
 
     int new_h = h * scale, new_w = w * scale;
     // IMPLEMENT YOUR CODE HERE
+    for (int y = 0; y < new_h; ++y) {
+        for (int x = 0; x < new_w; ++x) {
+            // find(y_src, x_src)
+            float y_src = y / scale;
+            float x_src = x / scale;
+
+            // 找到四个点
+            int y1 = static_cast<int>(y_src);
+            int x1 = static_cast<int>(x_src);
+            int y2 = y1 + 1;
+            int x2 = x1 + 1;
+
+            //边界
+            y1 = std::max(0, std::min(y1, h - 1));
+            x1 = std::max(0, std::min(x1, w - 1));
+            y2 = std::max(0, std::min(y2, h - 1));
+            x2 = std::max(0, std::min(x2, w - 1));
+
+            // 权重
+            float dy = y_src - y1;
+            float dx = x_src - x1;
+
+            // 插值
+            for (int k = 0; k < c; ++k) {
+                // 1-11,2-21,3-12,4-22
+                float p_1 = in[(y1 * w + x1) * c + k];
+                float p_2 = in[(y1 * w + x2) * c + k];
+                float p_3 = in[(y2 * w + x1) * c + k];
+                float p_4 = in[(y2 * w + x2) * c + k];
+
+                float val = p_1 * (1 - dx) * (1 - dy) +
+                            p_2 * dx * (1 - dy) +
+                            p_3 * (1 - dx) * dy +
+                            p_4 * dx * dy;
+
+                out[(y * new_w + x) * c + k] = val;
+            }
+        }
+    }
 
 }
 
@@ -221,4 +309,47 @@ void hist_eq(float *in, int h, int w) {
      */
 
     // IMPLEMENT YOUR CODE HERE
+    int num_pixels = h * w;
+
+    int hist[256];
+    memset(hist, 0, sizeof(hist));
+    for (int i = 0; i < num_pixels; ++i) {
+        int gray_lvl = static_cast<int>(in[i]);
+        if (gray_lvl >= 0 && gray_lvl <= 255) {
+            hist[gray_lvl]++;
+        }
+    }
+
+    int cdf[256];
+    cdf[0] = hist[0];
+    for (int i = 1; i < 256; ++i) {
+        cdf[i] = cdf[i - 1] + hist[i];
+    }
+
+    int c_min = num_pixels;
+    for (int i = 0; i < 256; ++i) {
+        if (cdf[i] > 0) {
+            c_min = cdf[i];
+            break;
+        }
+    }
+    if (num_pixels - c_min == 0) {return; } //白干
+
+    float lut[256];
+    float scale = 255.0f / (num_pixels - c_min);
+    for (int i = 0; i < 256; ++i) {
+        if (cdf[i] >= c_min) {
+            lut[i] = roundf(static_cast<float>(cdf[i] - c_min) * scale);
+        } 
+        else {lut[i] = 0;}
+    }
+
+    //renew
+    for (int i = 0; i < num_pixels; ++i) {
+        int gray_lvl = static_cast<int>(in[i]);
+        if (gray_lvl >= 0 && gray_lvl <= 255) {
+            in[i] = lut[gray_lvl];
+        }
+    }
+    
 }
